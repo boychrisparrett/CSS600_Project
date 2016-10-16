@@ -5,10 +5,26 @@
 
 globals [
   HOTSPOTS
+  PTYPE_AISR ;PED Line
+  PTYPE_NAIG ;Single frame annotated image product
+  PTYPE_AGIP ;Advanced product, requires pairing, etc.
+  PTYPE_FUSE ;Multi-source intelligence problem
+  T_SHIFT
+  T_DAY
+  T_WEEK
+  T_MONTH
 ]
 
 to setup-globals
   set HOTSPOTS 0
+  set T_SHIFT 8 ;hours
+  set T_DAY 24 ;hours
+  set T_WEEK 7 * T_DAY
+  set T_MONTH 4 * T_WEEK
+  set PTYPE_AISR 0;PED Line
+  set PTYPE_NAIG 1;Single frame annotated image product
+  set PTYPE_AGIP 2;Advanced product, requires pairing, etc.
+  set PTYPE_FUSE 3;Multi-source intelligence problem
 end
 
 ;;###################################################################
@@ -106,6 +122,87 @@ end
 ;; Setup turtles
 ;; INPUTS: NONE
 ;;
+to setup-RFI_Complexities
+  ask patches [
+
+    set RFI_PRODCOUNT 1 + (random MAX_PRODUCT_COUNT)
+    set pcolor (scale-color pcolor RFI_PRODCOUNT 1 MAX_PRODUCT_COUNT)
+    ifelse RFI_CUSTID = 0
+    [
+      set RFI_COMPLEXITY random 4
+      set RFI_TYPE 1 + (random 3)
+    ]
+    [
+      set RFI_COMPLEXITY RFI_CUSTID
+      set RFI_TYPE random 4
+    ]
+
+  ]
+end
+
+;;------------------------------------------------------------------
+;; Setup turtles
+;; INPUTS: NONE
+;;
+to setup-RFI_ProdProps
+  ;RFI_CUSTID       ;Customer ID to save logic
+  ;RFI_CUSTPRI      ;Customer's priority ranking
+  ;RFI_COMPLEXITY   ;probably a lookup table
+  ;RFI_TIMELINE     ;Length of time requirement exists
+  ;RFI_PERIODICITY  ;number of products per unit time
+  ask patches [
+    ;PED Line Requirement - Monitor stream for 12 hours, average output
+    ;                       is 2 products per hour within 1 hour of
+    ;                       collection; highest priority
+    if RFI_TYPE = PTYPE_AISR
+    [
+      set RFI_LTIOV 1 ;hours
+      set RFI_TIMELINE 12 ;PED line lasts hours
+      set RFI_PERIODICITY 2
+      set RFI_CUSTPRI 1.0
+    ]
+
+    ;IMINT Requirement - Single frame annotated image product due
+    ;                    within 8 hours of collection; typically higher
+    ;                    priority, with average of 2 products per day
+    if RFI_TYPE = PTYPE_NAIG ;
+    [
+      set RFI_LTIOV 8 ;hours
+      set RFI_PERIODICITY 2
+      set RFI_TIMELINE T_WEEK ; RFI lasts 1 week
+      set RFI_CUSTPRI 1 + (random-float 1)
+    ]
+
+    ;AGI Requirement   - Multi-frame annotated image product due
+    ;                    within 24 hours of collection; medium
+    ;                    priority, with average of 1 product per day
+    if RFI_TYPE = PTYPE_AGIP ;Advanced product, requires pairing, etc.
+    [
+      set RFI_LTIOV 24 ;hours
+      set RFI_PERIODICITY 1
+      set RFI_TIMELINE T_MONTH;RFI lasts 1 month
+      set RFI_CUSTPRI 1 + (random-float 4)
+    ]
+
+    ;GEOINT Fusion Requirement - Multi-frame annotated image product due
+    ;                            within specified LTIOV; medium to low
+    ;                            priority, with average of 1 product per
+    ;                            period
+    if RFI_TYPE = PTYPE_FUSE
+    [
+      set RFI_LTIOV 80 ;hours
+      set RFI_PERIODICITY 1
+      set RFI_TIMELINE T_MONTH;RFI lasts 1 week
+      set RFI_CUSTPRI 4 + (random-float 4)
+
+    ]
+  ]
+end
+
+;;------------------------------------------------------------------
+;; Setup turtles
+;; INPUTS: NONE
+;;
 to createnewHQ [aor px py]
   create-node_HQs 1 [
     set xcor px
@@ -137,7 +234,6 @@ to setup-node_HQs
     createnewHQ 3 9 -9
     createnewHQ 4 9 9
   ]
-
 end
 
 ;;------------------------------------------------------------------
@@ -149,6 +245,8 @@ to setup
   setup-globals
   setup-patches
   setup-node_HQs
+  setup-RFI_Complexities
+  setup-RFI_ProdProps
   reset-ticks
 end
 ;;###################################################################
@@ -275,10 +373,10 @@ NIL
 1
 
 SLIDER
-12
-66
-184
-99
+8
+52
+180
+85
 NUM_INITIAL_RFIS
 NUM_INITIAL_RFIS
 0
@@ -290,20 +388,20 @@ NIL
 HORIZONTAL
 
 CHOOSER
-11
-107
-149
-152
+8
+89
+100
+134
 NUM_NODES
 NUM_NODES
-1 2 5
-2
+1 5
+0
 
 SWITCH
-11
-158
-151
-191
+8
+140
+130
+173
 CENTRALIZED?
 CENTRALIZED?
 0
@@ -336,14 +434,29 @@ Customer RFI Distribution
 Region
 # RFIS
 0.0
-4.0
+5.0
 0.0
-10.0
+50.0
 true
 false
 "" ""
 PENS
 "default" 1.0 1 -16777216 true "" "histogram [NODE_ALIGN] of turtles"
+
+SLIDER
+8
+177
+179
+210
+MAX_PRODUCT_COUNT
+MAX_PRODUCT_COUNT
+0
+100
+97
+1
+1
+NIL
+HORIZONTAL
 
 @#$#@#$#@
 ## WHAT IS IT?
