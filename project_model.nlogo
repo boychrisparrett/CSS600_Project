@@ -40,7 +40,7 @@ patches-own [
   RFI_COMPLEXITY   ;probably a lookup table
   RFI_TIMELINE     ;Length of time requirement exists
   RFI_PERIODICITY  ;number of products per unit time
-  RFI_PRODCOUNT    ;ulitmate total of prod produced
+  RFI_PRODCOUNT    ;ulitmate total of prod to be produced (Periodicity*Time)
 ]
 ;;###################################################################
 
@@ -75,8 +75,10 @@ breed [nodes node]
 ; do not infer that the nodes actually move.
 directed-link-breed [ped-links ped-link]
 
-nodes-own [
-  STATVAR   ;Just some random variable to see if this works
+ped-links-own [
+  LINK_START_TIME
+  LINK_STOP_TIME
+  LINK_STATUS
 ]
 
 ;;###################################################################
@@ -119,13 +121,12 @@ to setup-patches
 end
 
 ;;------------------------------------------------------------------
-;; Setup turtles
+;; setup-RFI_Complexities
 ;; INPUTS: NONE
-;;
-to setup-RFI_Complexities
+;; Desc:
+to setup-RFI-Complexities
   ask patches [
-
-    set RFI_PRODCOUNT 1 + (random MAX_PRODUCT_COUNT)
+    set RFI_PRODCOUNT (random MAX_PRODUCT_COUNT)
     set pcolor (scale-color pcolor RFI_PRODCOUNT 1 MAX_PRODUCT_COUNT)
     ifelse RFI_CUSTID = 0
     [
@@ -144,12 +145,7 @@ end
 ;; Setup turtles
 ;; INPUTS: NONE
 ;;
-to setup-RFI_ProdProps
-  ;RFI_CUSTID       ;Customer ID to save logic
-  ;RFI_CUSTPRI      ;Customer's priority ranking
-  ;RFI_COMPLEXITY   ;probably a lookup table
-  ;RFI_TIMELINE     ;Length of time requirement exists
-  ;RFI_PERIODICITY  ;number of products per unit time
+to setup-RFI-ProductProps
   ask patches [
     ;PED Line Requirement - Monitor stream for 12 hours, average output
     ;                       is 2 products per hour within 1 hour of
@@ -200,7 +196,7 @@ to setup-RFI_ProdProps
 end
 
 ;;------------------------------------------------------------------
-;; Setup turtles
+;; Create a new Headquarters
 ;; INPUTS: NONE
 ;;
 to createnewHQ [aor px py]
@@ -222,7 +218,12 @@ to createnewHQ [aor px py]
   ]
 end
 
-to setup-node_HQs
+
+;;------------------------------------------------------------------
+;; Create a new Headquarters
+;; INPUTS: NONE
+;;
+to setup-node-HQs
   ifelse NUM_NODES = 1
   [
     createnewHQ 0 0 0
@@ -244,25 +245,13 @@ to setup
   clear-all
   setup-globals
   setup-patches
-  setup-node_HQs
-  setup-RFI_Complexities
-  setup-RFI_ProdProps
+  setup-node-HQs
+  setup-RFI-Complexities
+  setup-RFI-ProductProps
   reset-ticks
 end
 ;;###################################################################
 
-;;******************************************************************
-;;                     ACTION ROUTINES
-;;******************************************************************
-
-;;------------------------------------------------------------------
-;;
-;; MAIN
-;;
-to go
-  initiate-RFIS
-  tick
-end
 
 ;;------------------------------------------------------------------
 ;; function gets the AOR from the patch at x y
@@ -279,6 +268,33 @@ to-report get-patchaor [lx ly]
 end
 
 
+
+;;###################################################################
+;;###################################################################
+;;******************************************************************
+;;                     ACTION ROUTINES
+;;******************************************************************
+
+;;------------------------------------------------------------------
+;;
+;; MAIN
+;;
+to go
+  initiate-RFIS
+  ;1) Do I have the capacity?
+  ;   1.1) YES: Open RFI
+  ;   1.2) NO: Is this higher priority than others?
+  ;        1.2.1) YES: Can I federate a lower priority mission?
+  ;        1.2.2) NO: Can I federate this requirement?
+  ;   1.3) Has the Requirement been Federated?
+  ;        1.3.1) NO: MARK AS REJECTED.
+  ;   1.4) Is the LTIOV of the requirement drawing near?
+  ;        1.4.1) YES: Increase priority to lock down Analyst
+  ;
+  calc-req-capacity
+  tick
+end
+
 ;;------------------------------------------------------------------
 ;; Initiate RFIS: Randomly generate turtles throughout the patch,
 ;;                whatever patch they land on provides them with their
@@ -287,8 +303,9 @@ end
 ;;
 to initiate-RFIS
 
-  ;Randomly create the RFIs
-  create-nodes NUM_INITIAL_RFIS [
+  ;Randomly create the nodes on the RFI fabric
+  let numrfis random NUM_INITIAL_RFIS
+  create-nodes numrfis [
     set color red
     set size 0.5
     set shape "circle 2"
@@ -312,7 +329,14 @@ to initiate-RFIS
   [
     ;Establish links from nodes back to the single PED Center
     ask newbies [
-      ask hqs 0 [ create-links-with other nodes ]
+      ask hqs 0 [ create-ped-links-to other nodes ]
+      ask hqs 0 [
+        ask my-out-ped-links [
+          set LINK_START_TIME ticks
+          set LINK_STOP_TIME -1
+          set LINK_STATUS "NEW"
+        ]
+      ]
     ]
   ]
   [
@@ -320,12 +344,29 @@ to initiate-RFIS
     loop [
       ;Establish links from nodes back to their HQ
       ask newbies with [NODE_ALIGN = i] [
-        ask hqs i [ create-links-with nodes with [NODE_ALIGN = i] ]
+        ask hqs i [ create-ped-links-to nodes with [NODE_ALIGN = i] ]
+        ask hqs i [
+          ask my-out-ped-links [
+            set LINK_START_TIME ticks
+            set LINK_STOP_TIME -1
+            set LINK_STATUS "NEW"
+          ]
+        ]
       ]
       set i i + 1
       if i = NUM_NODES [ stop ]
     ]
   ]
+end
+
+;;------------------------------------------------------------------
+;; Initiate RFIS: Randomly generate turtles throughout the patch,
+;;                whatever patch they land on provides them with their
+;;                state variables
+;; INPUTS: NONE
+;;
+to calc-req-capacity
+
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
